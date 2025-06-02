@@ -8,7 +8,7 @@ use ratatui::{
     buffer::Buffer,
     layout::Rect,
     symbols::border,
-    text::Line,
+    text::{Line, Text},
     widgets::{Block, Widget},
 };
 
@@ -21,19 +21,23 @@ fn main() -> Result<()> {
 
 #[derive(Debug)]
 pub struct Game {
+    last_moved: Instant,
     snake: Vec<(u16, u16)>,
     snake_direction: Direction,
     apple_position: (u16, u16),
     snake_move_time: u64,
+    game_over: bool,
 }
 
 impl Default for Game {
     fn default() -> Self {
         Self {
+            last_moved: Instant::now(),
             snake: vec![(Self::BOARD_SIZE / 2, Self::BOARD_SIZE / 2)],
             snake_direction: Direction::Right,
             apple_position: (Self::BOARD_SIZE / 2, Self::BOARD_SIZE / 3),
             snake_move_time: 200,
+            game_over: false,
         }
     }
 }
@@ -42,9 +46,7 @@ impl Game {
     const BOARD_SIZE: u16 = 20;
 
     pub fn run(&mut self, mut terminal: DefaultTerminal) -> Result<()> {
-        let mut now = Instant::now();
-
-        'render: loop {
+        loop {
             while event::poll(Duration::ZERO).is_ok_and(|available| available) {
                 match event::read()? {
                     Event::Key(key_event) if key_event.kind == KeyEventKind::Press => {
@@ -69,7 +71,12 @@ impl Game {
                                     self.snake_direction = Direction::Right
                                 }
                             }
-                            KeyCode::Char('q') => break 'render Ok(()),
+                            KeyCode::Char('r') => {
+                                if self.game_over {
+                                    *self = Self::default();
+                                }
+                            }
+                            KeyCode::Char('q') => return Ok(()),
                             _ => (),
                         }
                     }
@@ -77,7 +84,9 @@ impl Game {
                 };
             }
 
-            if now.elapsed() > Duration::from_millis(self.snake_move_time) {
+            if !self.game_over
+                && self.last_moved.elapsed() > Duration::from_millis(self.snake_move_time)
+            {
                 let direction = self.snake_direction.get_vec2();
                 let head = self.snake[0];
 
@@ -87,7 +96,8 @@ impl Game {
                     || (head.0 == Self::BOARD_SIZE - 1 && direction.0 > 0)
                     || (head.1 == Self::BOARD_SIZE - 1 && direction.1 > 0)
                 {
-                    break Ok(());
+                    self.game_over = true;
+                    continue;
                 }
 
                 self.snake.pop();
@@ -99,43 +109,44 @@ impl Game {
 
                 // Snake hit itself
                 if self.snake.contains(&next_head) {
-                    break Ok(());
+                    self.game_over = true;
+                    continue;
                 }
 
                 self.snake.insert(0, next_head);
 
-                now = Instant::now();
-            }
+                self.last_moved = Instant::now();
 
-            if self.snake[0] == self.apple_position {
-                let tail_direction = if self.snake.len() > 1 {
-                    let (x1, y1) = self.snake[self.snake.len() - 1];
-                    let (x2, y2) = self.snake[self.snake.len() - 2];
-                    (x1 as i16 - x2 as i16, y1 as i16 - y2 as i16)
-                } else {
-                    let (x, y) = self.snake_direction.get_vec2();
-                    (-x, -y)
-                };
-                let tail = self.snake[self.snake.len() - 1];
+                if self.snake[0] == self.apple_position {
+                    let tail_direction = if self.snake.len() > 1 {
+                        let (x1, y1) = self.snake[self.snake.len() - 1];
+                        let (x2, y2) = self.snake[self.snake.len() - 2];
+                        (x1 as i16 - x2 as i16, y1 as i16 - y2 as i16)
+                    } else {
+                        let (x, y) = self.snake_direction.get_vec2();
+                        (-x, -y)
+                    };
+                    let tail = self.snake[self.snake.len() - 1];
 
-                self.snake.push((
-                    tail.0.saturating_add_signed(tail_direction.0),
-                    tail.1.saturating_add_signed(tail_direction.1),
-                ));
+                    self.snake.push((
+                        tail.0.saturating_add_signed(tail_direction.0),
+                        tail.1.saturating_add_signed(tail_direction.1),
+                    ));
 
-                let mut possible_positions =
-                    Vec::with_capacity(Self::BOARD_SIZE as usize * Self::BOARD_SIZE as usize);
+                    let mut possible_positions =
+                        Vec::with_capacity(Self::BOARD_SIZE as usize * Self::BOARD_SIZE as usize);
 
-                for x in 0..Self::BOARD_SIZE {
-                    for y in 0..Self::BOARD_SIZE {
-                        if !self.snake.contains(&(x, y)) {
-                            possible_positions.push((x, y));
+                    for x in 0..Self::BOARD_SIZE {
+                        for y in 0..Self::BOARD_SIZE {
+                            if !self.snake.contains(&(x, y)) {
+                                possible_positions.push((x, y));
+                            }
                         }
                     }
-                }
 
-                self.apple_position = *possible_positions.choose(&mut rand::rng()).unwrap();
-                self.snake_move_time = (self.snake_move_time - 10).max(50);
+                    self.apple_position = *possible_positions.choose(&mut rand::rng()).unwrap();
+                    self.snake_move_time = (self.snake_move_time - 10).max(50);
+                }
             }
 
             terminal.draw(|frame| self.draw(frame))?;
@@ -191,11 +202,17 @@ impl Widget for &Game {
             .title(Line::from(format!(" Score: {} ", self.snake.len() - 1)).centered())
             .render(border_rect, buf);
 
-        let (x, y) = self.apple_position;
-        buf[((x * 2) + board_rect.x, y + board_rect.y)].set_symbol("##");
+        if self.game_over {
+            Text::from("\n\n\n\nGame Over\n\nPress r to restart\nPress q to quit")
+                .centered()
+                .render(border_rect, buf);
+        } else {
+            let (x, y) = self.apple_position;
+            buf[((x * 2) + board_rect.x, y + board_rect.y)].set_symbol("##");
 
-        for (x, y) in &self.snake {
-            buf[((x * 2) + board_rect.x, y + board_rect.y)].set_symbol("██");
+            for (x, y) in &self.snake {
+                buf[((x * 2) + board_rect.x, y + board_rect.y)].set_symbol("██");
+            }
         }
     }
 }
