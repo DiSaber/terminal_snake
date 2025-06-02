@@ -163,6 +163,13 @@ impl Game {
 
 impl Widget for &Game {
     fn render(self, area: Rect, buf: &mut Buffer) {
+        assert!(
+            area.width > (Game::BOARD_SIZE + 2) * 2 && area.height > Game::BOARD_SIZE + 2,
+            "The terminal window must be at least {}x{} characters big",
+            (Game::BOARD_SIZE + 2) * 2,
+            Game::BOARD_SIZE + 2
+        );
+
         // Roughly 1x2 terminal character size
         let board_rect = Rect::new(
             area.x + ((area.width / 2).saturating_sub(Game::BOARD_SIZE)),
@@ -185,12 +192,10 @@ impl Widget for &Game {
             .render(border_rect, buf);
 
         let (x, y) = self.apple_position;
-        buf[((x * 2) + board_rect.x, y + board_rect.y)].set_char('#');
-        buf[((x * 2) + board_rect.x + 1, y + board_rect.y)].set_char('#');
+        buf[((x * 2) + board_rect.x, y + board_rect.y)].set_symbol("##");
 
         for (x, y) in &self.snake {
-            buf[((x * 2) + board_rect.x, y + board_rect.y)].set_char('█');
-            buf[((x * 2) + board_rect.x + 1, y + board_rect.y)].set_char('█');
+            buf[((x * 2) + board_rect.x, y + board_rect.y)].set_symbol("██");
         }
     }
 }
