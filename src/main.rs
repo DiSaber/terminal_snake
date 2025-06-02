@@ -81,6 +81,7 @@ impl Game {
                 let direction = self.snake_direction.get_vec2();
                 let head = self.snake[0];
 
+                // Snake hit border
                 if (head.0 == 0 && direction.0 < 0)
                     || (head.1 == 0 && direction.1 < 0)
                     || (head.0 == Self::BOARD_SIZE - 1 && direction.0 > 0)
@@ -89,15 +90,19 @@ impl Game {
                     break Ok(());
                 }
 
-                self.snake.insert(
-                    0,
-                    (
-                        head.0.saturating_add_signed(direction.0),
-                        head.1.saturating_add_signed(direction.1),
-                    ),
+                self.snake.pop();
+
+                let next_head = (
+                    head.0.saturating_add_signed(direction.0),
+                    head.1.saturating_add_signed(direction.1),
                 );
 
-                self.snake.pop();
+                // Snake hit itself
+                if self.snake.contains(&next_head) {
+                    break Ok(());
+                }
+
+                self.snake.insert(0, next_head);
 
                 now = Instant::now();
             }
