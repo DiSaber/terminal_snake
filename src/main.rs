@@ -174,12 +174,15 @@ impl Game {
 
 impl Widget for &Game {
     fn render(self, area: Rect, buf: &mut Buffer) {
-        assert!(
-            area.width > (Game::BOARD_SIZE + 2) * 2 && area.height > Game::BOARD_SIZE + 2,
-            "The terminal window must be at least {}x{} characters big",
-            (Game::BOARD_SIZE + 2) * 2,
-            Game::BOARD_SIZE + 2
-        );
+        if area.width < (Game::BOARD_SIZE + 3) * 2 || area.height < Game::BOARD_SIZE + 3 {
+            Line::from(format!(
+                "The terminal window must be at least {}x{}",
+                (Game::BOARD_SIZE + 3) * 2,
+                Game::BOARD_SIZE + 3
+            ))
+            .render(area, buf);
+            return;
+        }
 
         // Roughly 1x2 terminal character size
         let board_rect = Rect::new(
